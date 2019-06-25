@@ -581,11 +581,11 @@ machine that supports it, this package also provides the KVM virtualization
 platform.
 
 
-%package mini-x86
+%package mini-system-x86
 Summary: QEMU system emulator for x86, mini build
 # XXX in final build this should have version numbers attached
 Requires: qemu-system-x86-core
-%description mini-x86
+%description mini-system-x86
 This package provides a stripped down build of the QEMU system emulator for x86.
 It only targets a minimal modern feature set.
 
@@ -1610,7 +1610,7 @@ getent passwd qemu >/dev/null || \
 %config(noreplace) %{_sysconfdir}/modprobe.d/kvm.conf
 %endif
 
-%files mini-x86
+%files mini-system-x86
 %{_bindir}/qemu-mini-system-x86_64
 %{_datadir}/systemtap/tapset/qemu-mini-system-x86_64.stp
 %{_datadir}/systemtap/tapset/qemu-mini-system-x86_64-log.stp
