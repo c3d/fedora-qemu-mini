@@ -25,6 +25,10 @@
 %endif
 
 %global user_static 1
+%global build_mini 1
+%if %{build_mini}
+    %global user_static 0
+%endif
 
 %global have_kvm 0
 %if 0%{?kvm_package:1}
@@ -154,6 +158,8 @@ License: GPLv2 and BSD and MIT and CC-BY
 URL: http://www.qemu.org/
 
 Source0: http://wiki.qemu-project.org/download/%{name}-%{version}%{?rcstr}.tar.xz
+
+Source1: mini-i386-softmmu.mak
 
 # guest agent service
 Source10: qemu-guest-agent.service
@@ -339,6 +345,8 @@ BuildRequires: glibc-static pcre-static glib2-static zlib-static
 BuildRequires: grubby
 %endif
 
+Requires: %{name}-system-x86 = %{epoch}:%{version}-%{release}
+%if !%{build_mini}
 Requires: %{name}-user = %{epoch}:%{version}-%{release}
 Requires: %{name}-system-aarch64 = %{epoch}:%{version}-%{release}
 Requires: %{name}-system-alpha = %{epoch}:%{version}-%{release}
@@ -358,9 +366,9 @@ Requires: %{name}-system-sh4 = %{epoch}:%{version}-%{release}
 Requires: %{name}-system-sparc = %{epoch}:%{version}-%{release}
 Requires: %{name}-system-tricore = %{epoch}:%{version}-%{release}
 Requires: %{name}-system-unicore32 = %{epoch}:%{version}-%{release}
-Requires: %{name}-system-x86 = %{epoch}:%{version}-%{release}
 Requires: %{name}-system-xtensa = %{epoch}:%{version}-%{release}
 Requires: %{name}-img = %{epoch}:%{version}-%{release}
+%endif  # !build_mini
 
 
 %description
@@ -546,9 +554,43 @@ Requires: qemu-%{kvm_package}-core = %{epoch}:%{version}-%{release}
 This is a meta-package that provides a qemu-system-<arch>-core package
 for native architectures where kvm can be enabled. For example, in an
 x86 system, this will install qemu-system-x86-core
+%endif  # have_kvm
+
+
+%package system-x86
+Summary: QEMU system emulator for x86
+Requires: %{name}-system-x86-core = %{epoch}:%{version}-%{release}
+%{requires_all_modules}
+%description system-x86
+This package provides the QEMU system emulator for x86. When being run in a x86
+machine that supports it, this package also provides the KVM virtualization
+platform.
+
+%package system-x86-core
+Summary: QEMU system emulator for x86
+Requires: %{name}-common = %{epoch}:%{version}-%{release}
+Requires: seabios-bin
+Requires: sgabios-bin
+Requires: seavgabios-bin
+%if %{have_edk2}
+Requires: edk2-ovmf
 %endif
+%description system-x86-core
+This package provides the QEMU system emulator for x86. When being run in a x86
+machine that supports it, this package also provides the KVM virtualization
+platform.
 
 
+%package mini-x86
+Summary: QEMU system emulator for x86, mini build
+Requires: qemu-system-x86-core = %{epoch}:%{version}-%{release}
+%description mini-x86
+This package provides a stripped down build of the QEMU system emulator for x86.
+It only targets a minimal modern feature set.
+
+
+
+%if !%{build_mini}
 %package user
 Summary: QEMU user mode emulation of qemu targets
 Requires: %{name}-common = %{epoch}:%{version}-%{release}
@@ -860,30 +902,6 @@ Requires: %{name}-common = %{epoch}:%{version}-%{release}
 This package provides the QEMU system emulator for Unicore32 boards.
 
 
-%package system-x86
-Summary: QEMU system emulator for x86
-Requires: %{name}-system-x86-core = %{epoch}:%{version}-%{release}
-%{requires_all_modules}
-%description system-x86
-This package provides the QEMU system emulator for x86. When being run in a x86
-machine that supports it, this package also provides the KVM virtualization
-platform.
-
-%package system-x86-core
-Summary: QEMU system emulator for x86
-Requires: %{name}-common = %{epoch}:%{version}-%{release}
-Requires: seabios-bin
-Requires: sgabios-bin
-Requires: seavgabios-bin
-%if %{have_edk2}
-Requires: edk2-ovmf
-%endif
-%description system-x86-core
-This package provides the QEMU system emulator for x86. When being run in a x86
-machine that supports it, this package also provides the KVM virtualization
-platform.
-
-
 %package system-xtensa
 Summary: QEMU system emulator for Xtensa
 Requires: %{name}-system-xtensa-core = %{epoch}:%{version}-%{release}
@@ -896,7 +914,7 @@ Summary: QEMU system emulator for Xtensa
 Requires: %{name}-common = %{epoch}:%{version}-%{release}
 %description system-xtensa-core
 This package provides the QEMU system emulator for Xtensa boards.
-
+%endif  # !build_mini
 
 
 
@@ -1069,6 +1087,45 @@ run_configure_disable_everything() {
 }
 
 
+# Build qemu-system-mini-*
+%if %{build_mini}
+
+CFGS="i386-softmmu.mak"
+for cfg in $CFGS; do
+    cp default-configs/$cfg default-configs/old-$cfg
+    cp %{_sourcedir}/mini-$cfg default-configs/$cfg
+done
+
+mkdir build-mini
+pushd build-mini
+
+run_configure_disable_everything \
+    --target-list="x86_64-softmmu" \
+    --enable-kvm \
+    --enable-pie \
+    --enable-system \
+    --enable-virtfs \
+    --enable-cap-ng \
+    --enable-attr \
+    --enable-vhost-net \
+    --enable-vhost-scsi \
+    --enable-vhost-user \
+    --enable-vhost-vsock \
+    --enable-vhost-kernel \
+    --enable-linux-aio \
+    --enable-avx2 \
+    --enable-coroutine-pool \
+    --enable-linux-aio \
+    --enable-seccomp
+
+make V=1 %{?_smp_mflags} $buildldflags
+popd
+
+for cfg in $CFGS; do
+    mv default-configs/old-$cfg default-configs/$cfg
+done
+%endif # build_mini
+
 # Build for non-static qemu-*
 mkdir build-dynamic
 pushd build-dynamic
@@ -1078,6 +1135,9 @@ run_configure \
     --enable-kvm \
     --enable-system \
     --enable-linux-user \
+%if %{build_mini}
+    --target-list="x86_64-softmmu,i386-softmmu" \
+%endif
     --enable-pie \
     --enable-modules \
     --enable-mpath \
@@ -1116,7 +1176,6 @@ popd
 
 
 
-
 %install
 
 %global _udevdir /lib/udev/rules.d
@@ -1151,6 +1210,19 @@ install -m 0644 %{_sourcedir}/qemu-pr-helper.socket %{buildroot}%{_unitdir}
 install -d %{buildroot}%{_sysconfdir}/security/limits.d
 install -m 0644 %{_sourcedir}/95-kvm-ppc64-memlock.conf %{buildroot}%{_sysconfdir}/security/limits.d
 %endif
+
+
+# Install qemu-mini-system-*
+%if %{build_mini}
+pushd build-mini
+for src in x86_64-softmmu/qemu-*.stp; do
+  dst=`basename $src | sed -e 's/qemu-system/qemu-mini-system/'`
+  install -D -p -m 0644 $src %{buildroot}/%{_datadir}/systemtap/tapset/$dst
+done
+
+install -D -p -m 0755 x86_64-softmmu/qemu-system-x86_64 %{buildroot}/%{_bindir}/qemu-mini-system-x86_64
+popd
+%endif  # build_mini
 
 
 # Install qemu-user-static tree
@@ -1205,6 +1277,7 @@ install -D -p -m 0644 %{_sourcedir}/kvm-x86.modprobe.conf %{buildroot}%{_sysconf
 
 
 # Install binfmt
+%if !%{build_mini}
 %global binfmt_dir %{buildroot}%{_exec_prefix}/lib/binfmt.d
 mkdir -p %{binfmt_dir}
 
@@ -1219,6 +1292,7 @@ for regularfmt in %{binfmt_dir}/*; do
   cat $regularfmt | tr -d '\n' | sed "s/:$/-static:F/" > $staticfmt
 done
 %endif
+%endif  # !build_mini
 
 
 # XXX With qemu 2.11 we can probably drop this symlinking with use of
@@ -1338,6 +1412,7 @@ getent passwd qemu >/dev/null || \
     -c "qemu user" qemu
 
 
+%if !%{build_mini}
 %post user-binfmt
 /bin/systemctl --system try-restart systemd-binfmt.service &>/dev/null || :
 %postun user-binfmt
@@ -1349,6 +1424,8 @@ getent passwd qemu >/dev/null || \
 %postun user-static
 /bin/systemctl --system try-restart systemd-binfmt.service &>/dev/null || :
 %endif
+%endif  # !build_mini
+
 
 %post guest-agent
 %systemd_post qemu-guest-agent.service
@@ -1495,9 +1572,52 @@ getent passwd qemu >/dev/null || \
 
 %files kvm-core
 # Deliberately empty
+%endif  # !have_kvm
+
+
+%files system-x86
+%files system-x86-core
+%{_bindir}/qemu-system-i386
+%{_bindir}/qemu-system-x86_64
+%{_datadir}/systemtap/tapset/qemu-system-i386*.stp
+%{_datadir}/systemtap/tapset/qemu-system-x86_64*.stp
+%{_mandir}/man1/qemu-system-i386.1*
+%{_mandir}/man1/qemu-system-x86_64.1*
+%{_datadir}/%{name}/bios.bin
+%{_datadir}/%{name}/bios-256k.bin
+%{_datadir}/%{name}/kvmvapic.bin
+%{_datadir}/%{name}/linuxboot.bin
+%{_datadir}/%{name}/linuxboot_dma.bin
+%{_datadir}/%{name}/multiboot.bin
+%{_datadir}/%{name}/pvh.bin
+%{_datadir}/%{name}/sgabios.bin
+%if %{build_mini}
+%{_datadir}/%{name}/*.dtb
+%{_datadir}/%{name}/hppa-firmware.img
+%{_datadir}/%{name}/palcode-clipper
+%{_datadir}/%{name}/ppc_rom.bin
+%{_datadir}/%{name}/QEMU*.bin
+%{_datadir}/%{name}/qemu_vga.ndrv
+%{_datadir}/%{name}/s390*
+%{_datadir}/%{name}/skiboot.lid
+%{_datadir}/%{name}/spapr-rtas.bin
+%{_datadir}/%{name}/u-boot*
+%endif # build_mini
+%if 0%{?need_qemu_kvm}
+%{_bindir}/qemu-kvm
+%{_mandir}/man1/qemu-kvm.1*
+%config(noreplace) %{_sysconfdir}/modprobe.d/kvm.conf
 %endif
 
+%files mini-x86
+%{_bindir}/qemu-mini-system-x86_64
+%{_datadir}/systemtap/tapset/qemu-mini-system-x86_64.stp
+%{_datadir}/systemtap/tapset/qemu-mini-system-x86_64-log.stp
+%{_datadir}/systemtap/tapset/qemu-mini-system-x86_64-simpletrace.stp
 
+
+
+%if !%{build_mini}
 %files user
 %{_bindir}/qemu-i386
 %{_bindir}/qemu-x86_64
@@ -1820,29 +1940,6 @@ getent passwd qemu >/dev/null || \
 %{_mandir}/man1/qemu-system-unicore32.1*
 
 
-%files system-x86
-%files system-x86-core
-%{_bindir}/qemu-system-i386
-%{_bindir}/qemu-system-x86_64
-%{_datadir}/systemtap/tapset/qemu-system-i386*.stp
-%{_datadir}/systemtap/tapset/qemu-system-x86_64*.stp
-%{_mandir}/man1/qemu-system-i386.1*
-%{_mandir}/man1/qemu-system-x86_64.1*
-%{_datadir}/%{name}/bios.bin
-%{_datadir}/%{name}/bios-256k.bin
-%{_datadir}/%{name}/kvmvapic.bin
-%{_datadir}/%{name}/linuxboot.bin
-%{_datadir}/%{name}/linuxboot_dma.bin
-%{_datadir}/%{name}/multiboot.bin
-%{_datadir}/%{name}/pvh.bin
-%{_datadir}/%{name}/sgabios.bin
-%if 0%{?need_qemu_kvm}
-%{_bindir}/qemu-kvm
-%{_mandir}/man1/qemu-kvm.1*
-%config(noreplace) %{_sysconfdir}/modprobe.d/kvm.conf
-%endif
-
-
 %files system-xtensa
 %files system-xtensa-core
 %{_bindir}/qemu-system-xtensa
@@ -1850,6 +1947,8 @@ getent passwd qemu >/dev/null || \
 %{_datadir}/systemtap/tapset/qemu-system-xtensa*.stp
 %{_mandir}/man1/qemu-system-xtensa.1*
 %{_mandir}/man1/qemu-system-xtensaeb.1*
+%endif  # !build_mini
+
 
 
 %changelog
