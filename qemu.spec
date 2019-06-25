@@ -583,7 +583,8 @@ platform.
 
 %package mini-x86
 Summary: QEMU system emulator for x86, mini build
-Requires: qemu-system-x86-core = %{epoch}:%{version}-%{release}
+# XXX in final build this should have version numbers attached
+Requires: qemu-system-x86-core
 %description mini-x86
 This package provides a stripped down build of the QEMU system emulator for x86.
 It only targets a minimal modern feature set.
