@@ -152,7 +152,7 @@
 Summary: QEMU is a FAST! processor emulator
 Name: qemu
 Version: 4.0.0
-Release: 4%{?rcrel}%{?dist}
+Release: 4%{?rcrel}%{?dist}.1
 Epoch: 2
 License: GPLv2 and BSD and MIT and CC-BY
 URL: http://www.qemu.org/
@@ -1110,7 +1110,6 @@ run_configure_disable_everything \
     --enable-attr \
     --enable-vhost-net \
     --enable-vhost-scsi \
-    --enable-vhost-user \
     --enable-vhost-vsock \
     --enable-vhost-kernel \
     --enable-linux-aio \
@@ -1953,6 +1952,9 @@ getent passwd qemu >/dev/null || \
 
 
 %changelog
+* Thu Jun 27 2019 Cole Robinson <aintdiscole@gmail.com> - 4.0.0-4.1
+- qemu-mini: drop --enable-vhost-scsi
+
 * Thu Jun 20 2019 Cole Robinson <crobinso@redhat.com> - 2:4.0.0-4
 - CVE-2019-12155: qxl: null pointer dereference while releasing spice
   resources (bz #1712727, bz #1712670)
