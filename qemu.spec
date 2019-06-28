@@ -152,7 +152,7 @@
 Summary: QEMU is a FAST! processor emulator
 Name: qemu
 Version: 4.0.0
-Release: 4%{?rcrel}%{?dist}.1
+Release: 4%{?rcrel}%{?dist}.2
 Epoch: 2
 License: GPLv2 and BSD and MIT and CC-BY
 URL: http://www.qemu.org/
@@ -1058,6 +1058,7 @@ run_configure_disable_everything() {
         --disable-spice \
         --disable-system \
         --disable-tcmalloc \
+        --disable-tcg \
         --disable-tools \
         --disable-tpm \
         --disable-usb-redir \
@@ -1952,6 +1953,9 @@ getent passwd qemu >/dev/null || \
 
 
 %changelog
+* Fri Jun 28 2019 Cole Robinson <aintdiscole@gmail.com> - 4.0.0-4.2
+- qemu-ming: Add --disable-tcg
+
 * Thu Jun 27 2019 Cole Robinson <aintdiscole@gmail.com> - 4.0.0-4.1
 - qemu-mini: drop --enable-vhost-scsi
 
