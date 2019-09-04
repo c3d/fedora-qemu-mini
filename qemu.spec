@@ -1,38 +1,37 @@
 %ifarch %{ix86}
-%global kvm_package   system-x86
+%global kvm_arch   x86
 # need_qemu_kvm should only ever be used by x86
 %global need_qemu_kvm 1
 %endif
 %ifarch x86_64
-%global kvm_package   system-x86
+%global kvm_arch   x86
 # need_qemu_kvm should only ever be used by x86
 %global need_qemu_kvm 1
 %endif
 %ifarch %{power64}
-%global kvm_package   system-ppc
+%global kvm_arch   ppc
 %endif
 %ifarch s390x
-%global kvm_package   system-s390x
+%global kvm_arch   s390x
 %endif
 %ifarch armv7hl
-%global kvm_package   system-arm
+%global kvm_arch   arm
 %endif
 %ifarch aarch64
-%global kvm_package   system-aarch64
+%global kvm_arch   aarch64
 %endif
 %ifarch %{mips}
-%global kvm_package   system-mips
+%global kvm_arch   mips
 %endif
 
 %global user_static 1
-%global build_mini 1
-%if %{build_mini}
-    %global user_static 0
-%endif
+%global user_mini 0
 
 %global have_kvm 0
-%if 0%{?kvm_package:1}
+%if 0%{?kvm_arch:1}
+%global kvm_package system-%{kvm_arch}
 %global have_kvm 1
+%global user_mini 1
 %endif
 
 # Matches numactl ExcludeArch
@@ -142,7 +141,7 @@
 %{obsoletes_block_rbd}
 
 # Release candidate version tracking
-# global rcver rc3
+#global rcver rc2
 %if 0%{?rcver:1}
 %global rcrel .%{rcver}
 %global rcstr -%{rcver}
@@ -151,15 +150,13 @@
 
 Summary: QEMU is a FAST! processor emulator
 Name: qemu
-Version: 4.0.0
-Release: 4%{?rcrel}%{?dist}.2
+Version: 4.1.0
+Release: 1%{?rcrel}%{?dist}.2
 Epoch: 2
 License: GPLv2 and BSD and MIT and CC-BY
 URL: http://www.qemu.org/
 
 Source0: http://wiki.qemu-project.org/download/%{name}-%{version}%{?rcstr}.tar.xz
-
-Source1: mini-i386-softmmu.mak
 
 # guest agent service
 Source10: qemu-guest-agent.service
@@ -178,28 +175,16 @@ Source20: kvm-x86.modprobe.conf
 # /etc/security/limits.d/95-kvm-ppc64-memlock.conf
 Source21: 95-kvm-ppc64-memlock.conf
 
-# Don't block migration with nested VMX (bz #1697997)
-# Not upstream: temporary workaround until kernel supports lands for nested
-# VMX migration
-Patch0001: 0001-Revert-target-i386-kvm-add-VMX-migration-blocker.patch
-# CVE-2018-12126, CVE-2018-12127, CVE-2018-12130, CVE-2019-11091
-Patch0002: 0002-target-i386-define-md-clear-bit.patch
-# CVE-2019-12155: qxl: null pointer dereference while releasing spice
-# resources (bz #1712727, bz #1712670)
-Patch0003: 0003-qxl-check-release-info-object.patch
-# qemu-4.0.0-2.fc31 ppc64le: rpm hash calculation buggy (bz #1715017)
-Patch0004: 0004-target-ppc-Fix-lxvw4x-lxvh8x-and-lxvb16x.patch
-# Fix rawhide build (bz #1718926)
-# Not upstream, might be a kernel fix
-Patch0005: 0005-NOT-UPSTREAM-Build-fix-with-latest-kernel.patch
 
 # documentation deps
 BuildRequires: texinfo
 # For /usr/bin/pod2man
 BuildRequires: perl-podlators
+%ifnarch %{ix86}
 # For sanity test
 BuildRequires: qemu-sanity-check-nodeps
 BuildRequires: kernel
+%endif
 %if %{have_iasl}
 # For acpi compilation
 BuildRequires: iasl
@@ -278,7 +263,7 @@ BuildRequires: glusterfs-api-devel >= 3.4.0
 # Needed for usb passthrough for qemu >= 1.5
 BuildRequires: libusbx-devel
 # SSH block driver
-BuildRequires: libssh2-devel
+BuildRequires: libssh-devel
 # GTK frontend
 BuildRequires: gtk3-devel
 BuildRequires: vte291-devel
@@ -304,7 +289,7 @@ BuildRequires: libtasn1-devel
 BuildRequires: libcacard-devel >= 2.5.0
 # qemu 2.5: virgl 3d support
 BuildRequires: virglrenderer-devel
-# qemu 2.6: Needed for gtk GL support
+# qemu 2.6: Needed for gtk GL support, vhost-user-gpu
 BuildRequires: mesa-libgbm-devel
 # qemu 2.11: preferred disassembler for TCG
 BuildRequires: capstone-devel
@@ -345,8 +330,6 @@ BuildRequires: glibc-static pcre-static glib2-static zlib-static
 BuildRequires: grubby
 %endif
 
-Requires: %{name}-system-x86 = %{epoch}:%{version}-%{release}
-%if !%{build_mini}
 Requires: %{name}-user = %{epoch}:%{version}-%{release}
 Requires: %{name}-system-aarch64 = %{epoch}:%{version}-%{release}
 Requires: %{name}-system-alpha = %{epoch}:%{version}-%{release}
@@ -366,9 +349,9 @@ Requires: %{name}-system-sh4 = %{epoch}:%{version}-%{release}
 Requires: %{name}-system-sparc = %{epoch}:%{version}-%{release}
 Requires: %{name}-system-tricore = %{epoch}:%{version}-%{release}
 Requires: %{name}-system-unicore32 = %{epoch}:%{version}-%{release}
+Requires: %{name}-system-x86 = %{epoch}:%{version}-%{release}
 Requires: %{name}-system-xtensa = %{epoch}:%{version}-%{release}
 Requires: %{name}-img = %{epoch}:%{version}-%{release}
-%endif  # !build_mini
 
 
 %description
@@ -554,44 +537,19 @@ Requires: qemu-%{kvm_package}-core = %{epoch}:%{version}-%{release}
 This is a meta-package that provides a qemu-system-<arch>-core package
 for native architectures where kvm can be enabled. For example, in an
 x86 system, this will install qemu-system-x86-core
-%endif  # have_kvm
 
 
-%package system-x86
-Summary: QEMU system emulator for x86
-Requires: %{name}-system-x86-core = %{epoch}:%{version}-%{release}
-%{requires_all_modules}
-%description system-x86
-This package provides the QEMU system emulator for x86. When being run in a x86
-machine that supports it, this package also provides the KVM virtualization
-platform.
-
-%package system-x86-core
-Summary: QEMU system emulator for x86
-Requires: %{name}-common = %{epoch}:%{version}-%{release}
-Requires: seabios-bin
-Requires: sgabios-bin
-Requires: seavgabios-bin
-%if %{have_edk2}
-Requires: edk2-ovmf
+%package mini
+Summary: Minimum QEMU with KVM support but no legacy
+Requires: qemu-%{kvm_package}-mini = %{epoch}:%{version}-%{release}
+%description mini
+This is a meta-package that provides a qemu-system-<arch>-mini package
+containing a stripped-down build of QEMU system emulator that only
+targets a minimal modern feature set, without legacy drivers. For
+example, on an x86 system, this will install qemu-system-x86-mini.
 %endif
-%description system-x86-core
-This package provides the QEMU system emulator for x86. When being run in a x86
-machine that supports it, this package also provides the KVM virtualization
-platform.
 
 
-%package mini-system-x86
-Summary: QEMU system emulator for x86, mini build
-# XXX in final build this should have version numbers attached
-Requires: qemu-system-x86-core
-%description mini-system-x86
-This package provides a stripped down build of the QEMU system emulator for x86.
-It only targets a minimal modern feature set.
-
-
-
-%if !%{build_mini}
 %package user
 Summary: QEMU user mode emulation of qemu targets
 Requires: %{name}-common = %{epoch}:%{version}-%{release}
@@ -644,6 +602,17 @@ Requires: edk2-aarch64
 %description system-aarch64-core
 This package provides the QEMU system emulator for AArch64.
 
+%ifarch aarch64
+%package system-aarch64-mini
+Summary: QEMU system emulator for AArch64 in a minimal configuration
+Requires: %{name}-common = %{epoch}:%{version}-%{release}
+%if %{have_edk2}
+Requires: edk2-aarch64
+%endif
+%description system-aarch64-mini
+This package provides the QEMU system emulator for AArch64 in a
+minimal configuration suitable for use with modern Linux kernels.
+%endif
 
 %package system-alpha
 Summary: QEMU system emulator for Alpha
@@ -672,6 +641,14 @@ Requires: %{name}-common = %{epoch}:%{version}-%{release}
 %description system-arm-core
 This package provides the QEMU system emulator for ARM boards.
 
+%ifarch %{arm}
+%package system-arm-mini
+Summary: QEMU system emulator for ARM in a minimal configuration
+Requires: %{name}-common = %{epoch}:%{version}-%{release}
+%description system-arm-mini
+This package provides the QEMU system emulator for ARM boards in a
+minimal configuration suitable for use with modern Linux kernels.
+%endif
 
 %package system-cris
 Summary: QEMU system emulator for CRIS
@@ -817,6 +794,18 @@ Requires: seavgabios-bin
 %description system-ppc-core
 This package provides the QEMU system emulator for PPC and PPC64 systems.
 
+%ifarch %{power64}
+%package system-ppc-mini
+Summary: QEMU system emulator for PPC in a minimal configuration
+Requires: %{name}-common = %{epoch}:%{version}-%{release}
+Requires: openbios
+Requires: SLOF
+Requires: seavgabios-bin
+%description system-ppc-mini
+This package provides the QEMU system emulator for PPC and PPC64
+systems in a minimal configuration suitable for use with modern Linux
+kernels.
+%endif
 
 %package system-riscv
 Summary: QEMU system emulator for RISC-V
@@ -844,6 +833,15 @@ Summary: QEMU system emulator for S390
 Requires: %{name}-common = %{epoch}:%{version}-%{release}
 %description system-s390x-core
 This package provides the QEMU system emulator for S390 systems.
+
+%ifarch s390x
+%package system-s390x-mini
+Summary: QEMU system emulator for S390 in a minimal configuration
+Requires: %{name}-common = %{epoch}:%{version}-%{release}
+%description system-s390x-mini
+This package provides the QEMU system emulator for S390 systems in a
+minimal configuration suitable for use with modern Linux kernels.
+%endif
 
 
 %package system-sh4
@@ -903,6 +901,44 @@ Requires: %{name}-common = %{epoch}:%{version}-%{release}
 This package provides the QEMU system emulator for Unicore32 boards.
 
 
+%package system-x86
+Summary: QEMU system emulator for x86
+Requires: %{name}-system-x86-core = %{epoch}:%{version}-%{release}
+%{requires_all_modules}
+%description system-x86
+This package provides the QEMU system emulator for x86. When being run in a x86
+machine that supports it, this package also provides the KVM virtualization
+platform.
+
+%package system-x86-core
+Summary: QEMU system emulator for x86
+Requires: %{name}-common = %{epoch}:%{version}-%{release}
+Requires: seabios-bin
+Requires: sgabios-bin
+Requires: seavgabios-bin
+%if %{have_edk2}
+Requires: edk2-ovmf
+%endif
+%description system-x86-core
+This package provides the QEMU system emulator for x86. When being run in a x86
+machine that supports it, this package also provides the KVM virtualization
+platform.
+
+%ifarch x86_64
+%package system-x86-mini
+Summary: QEMU system emulator for x86 in a minimal configuration
+Requires: %{name}-common = %{epoch}:%{version}-%{release}
+Requires: seabios-bin
+Requires: sgabios-bin
+Requires: seavgabios-bin
+%if %{have_edk2}
+Requires: edk2-ovmf
+%endif
+%description system-x86-mini
+This package provides the QEMU system emulator for x86 in a minimal
+configuration suitable for use with modern Linux kernels.
+%endif
+
 %package system-xtensa
 Summary: QEMU system emulator for Xtensa
 Requires: %{name}-system-xtensa-core = %{epoch}:%{version}-%{release}
@@ -915,7 +951,7 @@ Summary: QEMU system emulator for Xtensa
 Requires: %{name}-common = %{epoch}:%{version}-%{release}
 %description system-xtensa-core
 This package provides the QEMU system emulator for Xtensa boards.
-%endif  # !build_mini
+
 
 
 
@@ -1023,7 +1059,7 @@ run_configure_disable_everything() {
         --disable-libiscsi \
         --disable-libnfs \
         --disable-libpmem \
-        --disable-libssh2 \
+        --disable-libssh \
         --disable-libusb \
         --disable-libxml2 \
         --disable-linux-aio \
@@ -1058,7 +1094,6 @@ run_configure_disable_everything() {
         --disable-spice \
         --disable-system \
         --disable-tcmalloc \
-        --disable-tcg \
         --disable-tools \
         --disable-tpm \
         --disable-usb-redir \
@@ -1089,43 +1124,46 @@ run_configure_disable_everything() {
 }
 
 
-# Build qemu-system-mini-*
-%if %{build_mini}
 
-CFGS="i386-softmmu.mak"
-for cfg in $CFGS; do
-    cp default-configs/$cfg default-configs/old-$cfg
-    cp %{_sourcedir}/mini-$cfg default-configs/$cfg
-done
+# Build for qemu-user-static
+%if %{user_static}
+mkdir build-static
+pushd build-static
 
+run_configure_disable_everything \
+    --disable-pie \
+    --enable-attr \
+    --enable-linux-user \
+    --static
+
+make V=1 %{?_smp_mflags} $buildldflags
+
+popd
+%endif
+
+
+# Build for qemu-mini
+%if %{user_mini}
 mkdir build-mini
 pushd build-mini
 
-run_configure_disable_everything \
-    --target-list="x86_64-softmmu" \
-    --enable-kvm \
-    --enable-pie \
-    --enable-system \
-    --enable-virtfs \
-    --enable-cap-ng \
-    --enable-attr \
-    --enable-vhost-net \
-    --enable-vhost-scsi \
-    --enable-vhost-vsock \
-    --enable-vhost-kernel \
-    --enable-linux-aio \
-    --enable-avx2 \
-    --enable-coroutine-pool \
-    --enable-linux-aio \
-    --enable-seccomp
+run_configure_disable_everything                \
+    --target-list="%{_arch}-softmmu"            \
+    --enable-kvm                                \
+    --enable-system                             \
+    --enable-virtfs                             \
+    --enable-cap-ng                             \
+    --enable-attr                               \
+    --enable-vhost-vsock                        \
+    --enable-vhost-kernel                       \
+    --enable-linux-aio                          \
+    --enable-debug-info
 
 make V=1 %{?_smp_mflags} $buildldflags
-popd
 
-for cfg in $CFGS; do
-    mv default-configs/old-$cfg default-configs/$cfg
-done
-%endif # build_mini
+popd
+%endif
+
 
 # Build for non-static qemu-*
 mkdir build-dynamic
@@ -1136,9 +1174,6 @@ run_configure \
     --enable-kvm \
     --enable-system \
     --enable-linux-user \
-%if %{build_mini}
-    --target-list="x86_64-softmmu,i386-softmmu" \
-%endif
     --enable-pie \
     --enable-modules \
     --enable-mpath \
@@ -1159,21 +1194,6 @@ make V=1 %{?_smp_mflags} $buildldflags
 
 popd
 
-
-# Build for qemu-user-static
-%if %{user_static}
-mkdir build-static
-pushd build-static
-
-run_configure_disable_everything \
-    --disable-pie \
-    --enable-linux-user \
-    --static
-
-make V=1 %{?_smp_mflags} $buildldflags
-
-popd
-%endif # user_static
 
 
 
@@ -1213,19 +1233,6 @@ install -m 0644 %{_sourcedir}/95-kvm-ppc64-memlock.conf %{buildroot}%{_sysconfdi
 %endif
 
 
-# Install qemu-mini-system-*
-%if %{build_mini}
-pushd build-mini
-for src in x86_64-softmmu/qemu-*.stp; do
-  dst=`basename $src | sed -e 's/qemu-system/qemu-mini-system/'`
-  install -D -p -m 0644 $src %{buildroot}/%{_datadir}/systemtap/tapset/$dst
-done
-
-install -D -p -m 0755 x86_64-softmmu/qemu-system-x86_64 %{buildroot}/%{_bindir}/qemu-mini-system-x86_64
-popd
-%endif  # build_mini
-
-
 # Install qemu-user-static tree
 mkdir -p %{buildroot}%{_bindir}
 %if %{user_static}
@@ -1247,7 +1254,22 @@ do
 done
 
 popd
-%endif # user_static
+%endif
+
+
+# Install qemu-mini tree
+%if %{user_mini}
+pushd build-mini
+install -D -p -m 0755 %{_arch}-softmmu/qemu-system-%{_arch} %{buildroot}/%{_bindir}/qemu-system-%{_arch}-mini
+
+for src in %{_arch}-softmmu/qemu-*.stp; do
+  dstbase=`basename $src | sed -e 's/.stp/-mini.stp/'`
+  dst=%{buildroot}/%{_datadir}/systemtap/tapset/$dstbase
+  install -D -p -m 0644 $src $dst
+  perl -i -p -e 's/(qemu-\w+)/$1-mini/g; s/(qemu\.user\.\w*)/$1.mini/g' $dst
+done
+popd
+%endif  # build_mini
 
 
 # Install main qemu-system-* tree
@@ -1276,9 +1298,12 @@ install -m 0755 %{_sourcedir}/qemu-kvm.sh %{buildroot}%{_bindir}/qemu-kvm
 install -D -p -m 0644 %{_sourcedir}/kvm-x86.modprobe.conf %{buildroot}%{_sysconfdir}/modprobe.d/kvm.conf
 %endif
 
+%if 0%{user_mini}
+ln -sf qemu.1.gz %{buildroot}%{_mandir}/man1/qemu-mini.1.gz
+ln -sf qemu-system-%{_arch}-mini %{buildroot}%{_bindir}/qemu-mini
+%endif
 
 # Install binfmt
-%if !%{build_mini}
 %global binfmt_dir %{buildroot}%{_exec_prefix}/lib/binfmt.d
 mkdir -p %{binfmt_dir}
 
@@ -1293,7 +1318,6 @@ for regularfmt in %{binfmt_dir}/*; do
   cat $regularfmt | tr -d '\n' | sed "s/:$/-static:F/" > $staticfmt
 done
 %endif
-%endif  # !build_mini
 
 
 # XXX With qemu 2.11 we can probably drop this symlinking with use of
@@ -1315,6 +1339,9 @@ rm -rf %{buildroot}%{_datadir}/%{name}/bios.bin
 rm -rf %{buildroot}%{_datadir}/%{name}/bios-256k.bin
 # Provided by package sgabios
 rm -rf %{buildroot}%{_datadir}/%{name}/sgabios.bin
+# Provided by package edk2
+rm -rf %{buildroot}%{_datadir}/%{name}/edk2*
+rm -rf %{buildroot}%{_datadir}/%{name}/firmware/*edk2*.json
 
 pxe_link() {
   ln -s ../ipxe/$2.rom %{buildroot}%{_datadir}/%{name}/pxe-$1.rom
@@ -1342,6 +1369,7 @@ rom_link ../seavgabios/vgabios-vmware.bin vgabios-vmware.bin
 rom_link ../seavgabios/vgabios-virtio.bin vgabios-virtio.bin
 rom_link ../seavgabios/vgabios-ramfb.bin vgabios-ramfb.bin
 rom_link ../seavgabios/vgabios-bochs-display.bin vgabios-bochs-display.bin
+rom_link ../seavgabios/vgabios-ati.bin vgabios-ati.bin
 rom_link ../seabios/bios.bin bios.bin
 rom_link ../seabios/bios-256k.bin bios-256k.bin
 rom_link ../sgabios/sgabios.bin sgabios.bin
@@ -1401,7 +1429,7 @@ make check V=1 || :
 qemu-sanity-check --qemu=%{?hostqemu} ||:
 %endif
 
-%endif  # archs_skip_tests
+%endif
 popd
 
 
@@ -1413,7 +1441,6 @@ getent passwd qemu >/dev/null || \
     -c "qemu user" qemu
 
 
-%if !%{build_mini}
 %post user-binfmt
 /bin/systemctl --system try-restart systemd-binfmt.service &>/dev/null || :
 %postun user-binfmt
@@ -1425,8 +1452,6 @@ getent passwd qemu >/dev/null || \
 %postun user-static
 /bin/systemctl --system try-restart systemd-binfmt.service &>/dev/null || :
 %endif
-%endif  # !build_mini
-
 
 %post guest-agent
 %systemd_post qemu-guest-agent.service
@@ -1455,9 +1480,11 @@ getent passwd qemu >/dev/null || \
 %doc %{qemudocdir}/qemu-qmp-ref.txt
 %doc %{qemudocdir}/README
 %doc %{qemudocdir}/interop
+%doc %{qemudocdir}/specs
 %dir %{_datadir}/%{name}/
 %{_datadir}/applications/qemu.desktop
 %{_datadir}/icons/hicolor/*/apps/*
+%exclude %{_datadir}/%{name}/qemu-nsis.bmp
 %{_datadir}/%{name}/keymaps/
 %{_datadir}/%{name}/trace-events-all
 %{_datadir}/%{name}/vgabios.bin
@@ -1468,6 +1495,7 @@ getent passwd qemu >/dev/null || \
 %{_datadir}/%{name}/vgabios-virtio.bin
 %{_datadir}/%{name}/vgabios-ramfb.bin
 %{_datadir}/%{name}/vgabios-bochs-display.bin
+%{_datadir}/%{name}/vgabios-ati.bin
 %{_datadir}/%{name}/pxe-e1000.rom
 %{_datadir}/%{name}/efi-e1000.rom
 %{_datadir}/%{name}/pxe-e1000e.rom
@@ -1484,6 +1512,7 @@ getent passwd qemu >/dev/null || \
 %{_datadir}/%{name}/efi-virtio.rom
 %{_datadir}/%{name}/pxe-vmxnet3.rom
 %{_datadir}/%{name}/efi-vmxnet3.rom
+%{_datadir}/%{name}/vhost-user/50-qemu-gpu.json
 %{_mandir}/man1/qemu.1*
 %{_mandir}/man1/qemu-trace-stap.1*
 %{_mandir}/man1/virtfs-proxy-helper.1*
@@ -1500,6 +1529,7 @@ getent passwd qemu >/dev/null || \
 %{_unitdir}/qemu-pr-helper.service
 %{_unitdir}/qemu-pr-helper.socket
 %attr(4755, root, root) %{_libexecdir}/qemu-bridge-helper
+%{_libexecdir}/vhost-user-gpu
 %config(noreplace) %{_sysconfdir}/sasl2/qemu.conf
 %dir %{_sysconfdir}/qemu
 %config(noreplace) %{_sysconfdir}/qemu/bridge.conf
@@ -1573,52 +1603,15 @@ getent passwd qemu >/dev/null || \
 
 %files kvm-core
 # Deliberately empty
-%endif  # !have_kvm
-
-
-%files system-x86
-%files system-x86-core
-%{_bindir}/qemu-system-i386
-%{_bindir}/qemu-system-x86_64
-%{_datadir}/systemtap/tapset/qemu-system-i386*.stp
-%{_datadir}/systemtap/tapset/qemu-system-x86_64*.stp
-%{_mandir}/man1/qemu-system-i386.1*
-%{_mandir}/man1/qemu-system-x86_64.1*
-%{_datadir}/%{name}/bios.bin
-%{_datadir}/%{name}/bios-256k.bin
-%{_datadir}/%{name}/kvmvapic.bin
-%{_datadir}/%{name}/linuxboot.bin
-%{_datadir}/%{name}/linuxboot_dma.bin
-%{_datadir}/%{name}/multiboot.bin
-%{_datadir}/%{name}/pvh.bin
-%{_datadir}/%{name}/sgabios.bin
-%if %{build_mini}
-%{_datadir}/%{name}/*.dtb
-%{_datadir}/%{name}/hppa-firmware.img
-%{_datadir}/%{name}/palcode-clipper
-%{_datadir}/%{name}/ppc_rom.bin
-%{_datadir}/%{name}/QEMU*.bin
-%{_datadir}/%{name}/qemu_vga.ndrv
-%{_datadir}/%{name}/s390*
-%{_datadir}/%{name}/skiboot.lid
-%{_datadir}/%{name}/spapr-rtas.bin
-%{_datadir}/%{name}/u-boot*
-%endif # build_mini
-%if 0%{?need_qemu_kvm}
-%{_bindir}/qemu-kvm
-%{_mandir}/man1/qemu-kvm.1*
-%config(noreplace) %{_sysconfdir}/modprobe.d/kvm.conf
 %endif
 
-%files mini-system-x86
-%{_bindir}/qemu-mini-system-x86_64
-%{_datadir}/systemtap/tapset/qemu-mini-system-x86_64.stp
-%{_datadir}/systemtap/tapset/qemu-mini-system-x86_64-log.stp
-%{_datadir}/systemtap/tapset/qemu-mini-system-x86_64-simpletrace.stp
+%if %{user_mini}
+%files mini
+%{_bindir}/qemu-mini
+%{_mandir}/man1/qemu-mini.1.gz
+%{_mandir}/man1/qemu-system-%{_arch}-mini.1.gz
+%endif
 
-
-
-%if !%{build_mini}
 %files user
 %{_bindir}/qemu-i386
 %{_bindir}/qemu-x86_64
@@ -1780,6 +1773,11 @@ getent passwd qemu >/dev/null || \
 %{_bindir}/qemu-system-aarch64
 %{_datadir}/systemtap/tapset/qemu-system-aarch64*.stp
 %{_mandir}/man1/qemu-system-aarch64.1*
+%ifarch aarch64
+%files system-aarch64-mini
+%{_bindir}/qemu-system-aarch64-mini
+%{_datadir}/systemtap/tapset/qemu-system-aarch64*-mini.stp
+%endif
 
 
 %files system-alpha
@@ -1795,7 +1793,11 @@ getent passwd qemu >/dev/null || \
 %{_bindir}/qemu-system-arm
 %{_datadir}/systemtap/tapset/qemu-system-arm*.stp
 %{_mandir}/man1/qemu-system-arm.1*
-
+%ifarch %{arm}
+%files system-arm-mini
+%{_bindir}/qemu-system-arm-mini
+%{_datadir}/systemtap/tapset/qemu-system-arm*-mini.stp
+%endif
 
 %files system-cris
 %files system-cris-core
@@ -1888,12 +1890,18 @@ getent passwd qemu >/dev/null || \
 %ifarch %{power64}
 %{_sysconfdir}/security/limits.d/95-kvm-ppc64-memlock.conf
 %endif
+%ifarch %{power64}
+%files system-ppc-mini
+%{_bindir}/qemu-system-ppc-mini
+%{_datadir}/systemtap/tapset/qemu-system-ppc*-mini.stp
+%endif
 
 
 %files system-riscv
 %files system-riscv-core
 %{_bindir}/qemu-system-riscv32
 %{_bindir}/qemu-system-riscv64
+%{_datadir}/%{name}/opensbi-riscv*.bin
 %{_datadir}/systemtap/tapset/qemu-system-riscv*.stp
 %{_mandir}/man1/qemu-system-riscv*.1*
 
@@ -1905,6 +1913,10 @@ getent passwd qemu >/dev/null || \
 %{_mandir}/man1/qemu-system-s390x.1*
 %{_datadir}/%{name}/s390-ccw.img
 %{_datadir}/%{name}/s390-netboot.img
+%ifarch s390x
+%files system-s390x-mini
+%{_bindir}/qemu-system-s390x-mini
+%endif
 
 
 %files system-sh4
@@ -1941,6 +1953,33 @@ getent passwd qemu >/dev/null || \
 %{_mandir}/man1/qemu-system-unicore32.1*
 
 
+%files system-x86
+%files system-x86-core
+%{_bindir}/qemu-system-i386
+%{_bindir}/qemu-system-x86_64
+%{_datadir}/systemtap/tapset/qemu-system-i386*.stp
+%{_datadir}/systemtap/tapset/qemu-system-x86_64*.stp
+%{_mandir}/man1/qemu-system-i386.1*
+%{_mandir}/man1/qemu-system-x86_64.1*
+%{_datadir}/%{name}/bios.bin
+%{_datadir}/%{name}/bios-256k.bin
+%{_datadir}/%{name}/kvmvapic.bin
+%{_datadir}/%{name}/linuxboot.bin
+%{_datadir}/%{name}/linuxboot_dma.bin
+%{_datadir}/%{name}/multiboot.bin
+%{_datadir}/%{name}/pvh.bin
+%{_datadir}/%{name}/sgabios.bin
+%if 0%{?need_qemu_kvm}
+%{_bindir}/qemu-kvm
+%{_mandir}/man1/qemu-kvm.1*
+%config(noreplace) %{_sysconfdir}/modprobe.d/kvm.conf
+%endif
+%ifarch x86_64
+%files system-x86-mini
+%{_bindir}/qemu-system-x86_64-mini
+%{_datadir}/systemtap/tapset/qemu-system-x86_64*-mini.stp
+%endif
+
 %files system-xtensa
 %files system-xtensa-core
 %{_bindir}/qemu-system-xtensa
@@ -1948,16 +1987,27 @@ getent passwd qemu >/dev/null || \
 %{_datadir}/systemtap/tapset/qemu-system-xtensa*.stp
 %{_mandir}/man1/qemu-system-xtensa.1*
 %{_mandir}/man1/qemu-system-xtensaeb.1*
-%endif  # !build_mini
-
 
 
 %changelog
-* Fri Jun 28 2019 Cole Robinson <aintdiscole@gmail.com> - 4.0.0-4.2
-- qemu-ming: Add --disable-tcg
+* Mon Sep 2 2019 Christophe de Dinechin <dinechin@redhat.com> - 2:4.1.0-1.2
+- Add qemu-mini experimental build
 
-* Thu Jun 27 2019 Cole Robinson <aintdiscole@gmail.com> - 4.0.0-4.1
-- qemu-mini: drop --enable-vhost-scsi
+* Mon Aug 19 2019 Cole Robinson <aintdiscole@gmail.com> - 2:4.1.0-1
+- Update to qemu-4.1.0 GA
+
+* Wed Jul 17 2019 Cole Robinson <aintdiscole@gmail.com> - 2:4.1.0-0.1.rc2
+- Update to qemu-4.1.0-rc2
+- Re-add libattr for qemu-user-static (bz 1731756)
+
+* Wed Jul 17 2019 Cole Robinson <aintdiscole@gmail.com> - 2:4.1.0-0.1.rc1
+- Update to qemu-4.1.0-rc1
+
+* Thu Jul 11 2019 Cole Robinson <aintdiscole@gmail.com> - 2:4.1.0-0.1.rc0
+- Update to qemu-4.1.0-rc0
+
+* Fri Jun 28 2019 Kevin Fenzi <kevin@scrye.com> - 2:4.0.0-5
+- Rebuild for new brltty.
 
 * Thu Jun 20 2019 Cole Robinson <crobinso@redhat.com> - 2:4.0.0-4
 - CVE-2019-12155: qxl: null pointer dereference while releasing spice
